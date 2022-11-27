@@ -525,7 +525,7 @@ async function run() {
 
     // Seller Product Get API
     app.get(
-      "/product/:sellerId",
+      "/products/seller/:sellerId",
       verifyToken,
       verifySeller,
       async (req, res) => {
@@ -542,6 +542,36 @@ async function run() {
             res.send({
               success: false,
               error: "No Product Found",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
+    // Seller Product Delete API
+    app.delete(
+      "/products/seller/:id",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { _id: ObjectId(id) };
+          const result = await products.deleteOne(query);
+          if (result.acknowledged && result.deletedCount > 0) {
+            res.send({
+              success: true,
+              message: "Product Deleted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Product Deletion Failed",
             });
           }
         } catch (error) {
