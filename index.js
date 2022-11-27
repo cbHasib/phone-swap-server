@@ -172,6 +172,32 @@ async function run() {
       }
     });
 
+    // Get User Role By Email Address
+    app.get("/users/role/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email: email };
+        const result = await usersCollection.findOne(query);
+        if (result) {
+          res.send({
+            success: true,
+            name: result.name,
+            role: result.role,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "User not found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
     // User Management End Here
 
     // Admin Route API Start Here
@@ -179,6 +205,9 @@ async function run() {
     app.get("/dashboard", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const productCount = await products.estimatedDocumentCount();
+        const adminCount = (
+          await usersCollection.find({ role: "admin" }).toArray()
+        ).length;
         const sellerCount = (
           await usersCollection.find({ role: "seller" }).toArray()
         ).length;
@@ -194,6 +223,7 @@ async function run() {
             sellerCount,
             buyerCount,
             totalUserCount,
+            adminCount,
           },
         });
       } catch (error) {
@@ -285,6 +315,31 @@ async function run() {
       }
     });
 
+    // get user by id
+    app.get("/users/:email", async (req, res) => {
+      try {
+        const email = req.params.email;
+        const query = { email: email };
+        const result = await usersCollection.findOne(query);
+        if (result) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "User not found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
     // Delete User by ID
     app.delete("/users/:id", verifyAdmin, async (req, res) => {
       try {
@@ -352,6 +407,33 @@ async function run() {
           res.send({
             success: false,
             error: "User Verification Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Admin Route API End Here
+
+    // Seller Route API Start Here
+    // Seller Product Create API
+    app.post("/products", verifyToken, verifySeller, async (req, res) => {
+      try {
+        const data = req.body;
+        const result = await products.insertOne(data);
+        if (result.acknowledged && result.insertedCount > 0) {
+          res.send({
+            success: true,
+            message: "Product Added Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "Product Addition Failed",
           });
         }
       } catch (error) {
