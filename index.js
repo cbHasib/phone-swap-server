@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion, Admin } = require("mongodb");
+const { MongoClient, ServerApiVersion, Admin, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 
@@ -235,7 +235,7 @@ async function run() {
     });
 
     // Get User by Role
-    app.get("/users", async (req, res) => {
+    app.get("/users", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { role } = req.query;
         if (role) {
@@ -341,20 +341,20 @@ async function run() {
     });
 
     // Delete User by ID
-    app.delete("/users/:id", verifyAdmin, async (req, res) => {
+    app.delete("/users/:id", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { id } = req.params;
-        const query = { _id: id };
+        const query = { _id: ObjectId(id) };
         const result = await usersCollection.deleteOne(query);
         if (result.deletedCount === 1) {
           res.send({
             success: true,
-            message: "User Deleted Successfully",
+            message: "User Deleted Successfully From Database",
           });
         } else {
           res.send({
             success: false,
-            error: "User Deletion Failed",
+            error: "User Deletion Failed From Database",
           });
         }
       } catch (error) {
@@ -369,7 +369,7 @@ async function run() {
     app.put("/users/admin/:id", async (req, res) => {
       try {
         const { id } = req.params;
-        const query = { _id: id };
+        const query = { _id: ObjectId(id) };
         const newDocs = { $set: { role: "admin" } };
         const result = await usersCollection.updateOne(query, newDocs);
         if (result.modifiedCount === 1) {
@@ -395,7 +395,7 @@ async function run() {
     app.put("/users/verify/:id", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { id } = req.params;
-        const query = { _id: id };
+        const query = { _id: ObjectId(id) };
         const newDocs = { $set: { isVerified: true } };
         const result = await usersCollection.updateOne(query, newDocs);
         if (result.modifiedCount === 1) {
