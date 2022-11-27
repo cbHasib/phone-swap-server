@@ -316,7 +316,7 @@ async function run() {
     });
 
     // get user by id
-    app.get("/users/:email", async (req, res) => {
+    app.get("/users/:email", verifyToken, async (req, res) => {
       try {
         const email = req.params.email;
         const query = { email: email };
@@ -366,7 +366,7 @@ async function run() {
     });
 
     // User Role Update by ID to Admin
-    app.put("/users/admin/:id", async (req, res) => {
+    app.put("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const { id } = req.params;
         const query = { _id: ObjectId(id) };
@@ -407,6 +407,55 @@ async function run() {
           res.send({
             success: false,
             error: "User Verification Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    const productCategory = db.collection("productCategory");
+    // Product Category Add API
+    app.post("/productCategory", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const data = req.body;
+        const result = await productCategory.insertOne(data);
+        console.log(result);
+        if (result.acknowledged && result.insertedId) {
+          res.send({
+            success: true,
+            message: "Product Category Added Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "Product Category Addition Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Product Category Get API
+    app.get("/productCategory", async (req, res) => {
+      try {
+        const result = await productCategory.find().toArray();
+        if (result.length > 0) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Product Category Found",
           });
         }
       } catch (error) {
