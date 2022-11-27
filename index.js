@@ -466,15 +466,45 @@ async function run() {
       }
     });
 
+    // Category Delete API
+    app.delete(
+      "/productCategory/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { _id: ObjectId(id) };
+          const result = await productCategory.deleteOne(query);
+          if (result.acknowledged && result.deletedCount > 0) {
+            res.send({
+              success: true,
+              message: "Product Category Deleted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Product Category Deletion Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Admin Route API End Here
 
     // Seller Route API Start Here
     // Seller Product Create API
-    app.post("/products", verifyToken, verifySeller, async (req, res) => {
+    app.post("/product", verifyToken, verifySeller, async (req, res) => {
       try {
         const data = req.body;
         const result = await products.insertOne(data);
-        if (result.acknowledged && result.insertedCount > 0) {
+        if (result.acknowledged && result.insertedId) {
           res.send({
             success: true,
             message: "Product Added Successfully",
@@ -492,6 +522,36 @@ async function run() {
         });
       }
     });
+
+    // Seller Product Get API
+    app.get(
+      "/product/:sellerId",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        try {
+          const sellerId = req.params.sellerId;
+          const query = { seller_id: sellerId };
+          const result = await products.find(query).toArray();
+          if (result.length > 0) {
+            res.send({
+              success: true,
+              data: result,
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "No Product Found",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
 
     //
   } finally {
