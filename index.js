@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const { MongoClient, ServerApiVersion } = require("mongodb");
+const { MongoClient, ServerApiVersion, Admin } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 
@@ -104,7 +104,7 @@ async function run() {
     const products = db.collection("products");
 
     // User Collection MongoDB CRUD Operations Start Here
-    const users = db.collection("users");
+    const usersCollection = db.collection("users");
 
     // JWT Token Assign
     app.get("/token", async (req, res) => {
@@ -120,7 +120,7 @@ async function run() {
       }
 
       const query = { email: email };
-      const user = await users.findOne(query);
+      const user = await usersCollection.findOne(query);
       if (user) {
         const token = jwt.sign(
           { email: user.email },
@@ -151,7 +151,7 @@ async function run() {
         const option = { upsert: true };
         const newDocs = { $set: user };
 
-        const result = await users.updateOne(query, newDocs, option);
+        const result = await usersCollection.updateOne(query, newDocs, option);
 
         if (result.acknowledged) {
           res.send({
@@ -175,14 +175,17 @@ async function run() {
     // User Management End Here
 
     // Admin Route API Start Here
+    // Dashboard Stats API
     app.get("/dashboard", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const productCount = await products.estimatedDocumentCount();
-        const sellerCount = (await users.find({ role: "seller" }).toArray())
-          .length;
-        const buyerCount = (await users.find({ role: "buyer" }).toArray())
-          .length;
-        const totalUserCount = await users.estimatedDocumentCount();
+        const sellerCount = (
+          await usersCollection.find({ role: "seller" }).toArray()
+        ).length;
+        const buyerCount = (
+          await usersCollection.find({ role: "buyer" }).toArray()
+        ).length;
+        const totalUserCount = await usersCollection.estimatedDocumentCount();
 
         res.send({
           success: true,
@@ -200,13 +203,16 @@ async function run() {
         });
       }
     });
+
     // Get User by Role
     app.get("/users", async (req, res) => {
       try {
         const { role } = req.query;
         if (role) {
           if (role === "admin") {
-            const result = await users.find({ role: "admin" }).toArray();
+            const result = await usersCollection
+              .find({ role: "admin" })
+              .toArray();
             if (result.length > 0) {
               res.send({
                 success: true,
@@ -220,7 +226,9 @@ async function run() {
             }
             return;
           } else if (role === "buyer") {
-            const result = await users.find({ role: "buyer" }).toArray();
+            const result = await usersCollection
+              .find({ role: "buyer" })
+              .toArray();
             if (result.length > 0) {
               res.send({
                 success: true,
@@ -234,7 +242,9 @@ async function run() {
             }
             return;
           } else if (role === "seller") {
-            const result = await users.find({ role: "seller" }).toArray();
+            const result = await usersCollection
+              .find({ role: "seller" })
+              .toArray();
             if (result.length > 0) {
               res.send({
                 success: true,
@@ -255,7 +265,7 @@ async function run() {
             return;
           }
         }
-        const result = await users.find().toArray();
+        const result = await usersCollection.find().toArray();
         if (result.length > 0) {
           res.send({
             success: true,
@@ -265,6 +275,83 @@ async function run() {
           res.send({
             success: false,
             error: "No User Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Delete User by ID
+    app.delete("/users/:id", verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: id };
+        const result = await usersCollection.deleteOne(query);
+        if (result.deletedCount === 1) {
+          res.send({
+            success: true,
+            message: "User Deleted Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "User Deletion Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // User Role Update by ID to Admin
+    app.put("/users/admin/:id", async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: id };
+        const newDocs = { $set: { role: "admin" } };
+        const result = await usersCollection.updateOne(query, newDocs);
+        if (result.modifiedCount === 1) {
+          res.send({
+            success: true,
+            message: "User Role Updated to Admin Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "User Role Update to Admin Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // User Verification by ID
+    app.put("/users/verify/:id", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: id };
+        const newDocs = { $set: { isVerified: true } };
+        const result = await usersCollection.updateOne(query, newDocs);
+        if (result.modifiedCount === 1) {
+          res.send({
+            success: true,
+            message: "User Verified Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "User Verification Failed",
           });
         }
       } catch (error) {
