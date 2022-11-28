@@ -919,6 +919,85 @@ async function run() {
 
     // product details api end here
 
+    // Buyer Route API Start Here
+    const bookingCollection = db.collection("bookings");
+    // Buyer Book Product API
+    app.post(
+      "/products/buyer/book/:id",
+      verifyToken,
+      verifyBuyer,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+
+          const body = req.body;
+
+          const query = { _id: ObjectId(id) };
+          const result = await products.findOne(query);
+          if (result) {
+            const { seller_id, name, price, image } = result;
+            //logged-in user name and email address, item name, and price(item name, price, and user information will not be editable) by default. You will give your phone number and meeting location, and lastly, there will be a submit button. After clicking the submit button, you will have to inform the buyer with a modal/toast that the item is booked.
+            const {
+              buyer_name,
+              buyer_id,
+              buyer_email,
+              contact_number,
+              meet_location,
+            } = body;
+
+            const newBooking = {
+              buyer_name,
+              buyer_id,
+              buyer_email,
+              contact_number,
+              meet_location,
+
+              seller_id,
+              product_id: id,
+              product_name: name,
+              product_price: price,
+              product_image: image,
+              status: "Booked",
+
+              date: new Date(),
+            };
+
+            const bookingResult = await bookingCollection.insertOne(newBooking);
+
+            const updateQuery = { $set: { status: "Sold" } };
+            const updateResult = await products.updateOne(query, updateQuery);
+
+            if (
+              bookingResult.acknowledged &&
+              bookingResult.insertedId &&
+              updateResult.acknowledged &&
+              updateResult.modifiedCount > 0
+            ) {
+              res.send({
+                success: true,
+                message: "Product Booked Successfully",
+              });
+            } else {
+              res.send({
+                success: false,
+                error: "Product Booking Failed",
+              });
+            }
+          } else {
+            res.send({
+              success: false,
+              error: "Product Not Found",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     //
   } finally {
   }
