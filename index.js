@@ -953,7 +953,7 @@ async function run() {
 
     // Buyer Route API Start Here
     const bookingCollection = db.collection("bookings");
-    // Buyer Book Product API
+    // Book Product API
     app.post("/products/book/:id", verifyToken, async (req, res) => {
       try {
         const { id } = req.params;
@@ -980,6 +980,249 @@ async function run() {
           res.send({
             success: false,
             error: "Product Booking Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Get Booked Products API
+    app.get("/products/booked/:email", verifyToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (email !== req.user.email) {
+          res.status(401).send({
+            success: false,
+            error: "Unauthorized Access",
+          });
+          return;
+        }
+
+        const query = { buyer_email: email };
+        const result = await bookingCollection
+          .find(query)
+          .sort({ _id: -1 })
+          .toArray();
+        if (result.length > 0) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Booked Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Get Single Booked Products API
+    app.get("/products/booked/:email/:id", verifyToken, async (req, res) => {
+      try {
+        const { email, id } = req.params;
+        if (email !== req.user.email) {
+          res.status(401).send({
+            success: false,
+            error: "Unauthorized Access",
+          });
+          return;
+        }
+
+        const query = { _id: ObjectId(id) };
+        const result = await bookingCollection.findOne(query);
+        if (result) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Booked Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Wishlist API Start Here
+    const wishlistCollection = db.collection("wishlist");
+    // Add to Wishlist API
+    app.post("/wishlist/add/:id", verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const checkIsExist = await wishlistCollection.findOne({
+          product_id: id,
+          buyer_email: req.user.email,
+        });
+        if (checkIsExist) {
+          res.send({
+            success: false,
+            error: "Product Already Added to Wishlist",
+          });
+          return;
+        }
+
+        const targetProduct = await products.findOne({ _id: ObjectId(id) });
+        if (!targetProduct) {
+          res.send({
+            success: false,
+            error: "Product Not Found",
+          });
+          return;
+        }
+
+        const {
+          product_name,
+          category_id,
+          resale_price,
+          contact_number,
+          condition,
+          location,
+          years_used,
+          description,
+          image,
+          post_time,
+          seller_name,
+          seller_id,
+        } = targetProduct;
+
+        const wishlistData = {
+          product_id: id,
+          product_name,
+          category_id,
+          resale_price,
+          contact_number,
+          condition,
+          location,
+          years_used,
+          description,
+          image,
+          post_time,
+          seller_name,
+          seller_id,
+          buyer_email: req.user.email,
+        };
+
+        const addWishlist = await wishlistCollection.insertOne(wishlistData);
+        if (addWishlist.acknowledged && addWishlist.insertedId) {
+          res.send({
+            success: true,
+            message: "Product Added to Wishlist Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "Product Adding to Wishlist Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Get wishlist API
+    app.get("/wishlist/:email", verifyToken, async (req, res) => {
+      try {
+        const { email } = req.params;
+        if (email !== req.user.email) {
+          res.status(401).send({
+            success: false,
+            error: "Unauthorized Access",
+          });
+          return;
+        }
+
+        const query = { buyer_email: email };
+        const result = await wishlistCollection
+          .find(query)
+          .sort({ _id: -1 })
+          .toArray();
+
+        if (result.length > 0) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Get Single wishlist API
+    app.get("/wishlist/:email/:id", verifyToken, async (req, res) => {
+      try {
+        const { email, id } = req.params;
+        if (email !== req.user.email) {
+          res.status(401).send({
+            success: false,
+            error: "Unauthorized Access",
+          });
+          return;
+        }
+
+        const query = { _id: ObjectId(id) };
+        const result = await wishlistCollection.findOne(query);
+        if (result) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Delete wishlist API
+    app.delete("/wishlist/:id", verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const query = { _id: ObjectId(id) };
+        const result = await wishlistCollection.deleteOne(query);
+        if (result.deletedCount > 0) {
+          res.send({
+            success: true,
+            message: "Product Deleted from Wishlist Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "Product Deleting from Wishlist Failed",
           });
         }
       } catch (error) {
