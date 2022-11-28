@@ -880,9 +880,41 @@ async function run() {
     });
 
     // Get Product By Category API
-    app.get("/products/category/:cat_id", async (req, res) => {
+    app.get("/products/category/:cat_id", verifyToken, async (req, res) => {
       try {
         const cat_id = req.params.cat_id;
+
+        if (!cat_id || cat_id == "all") {
+          const query = { status: "Available" };
+          const result = await products.find(query).sort({ _id: -1 }).toArray();
+
+          const users = await usersCollection.find({}).toArray();
+          const productsWithUsers = result.map((product) => {
+            const seller_id = product.seller_id;
+            const seller = users.find((user) => user._id == seller_id);
+            const seller_isVerified = seller.isVerified;
+
+            return {
+              ...product,
+              seller_isVerified,
+            };
+          });
+
+          if (productsWithUsers.length > 0) {
+            res.send({
+              success: true,
+              data: productsWithUsers,
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "No Product Found",
+            });
+          }
+
+          return;
+        }
+
         const query = { category_id: cat_id };
         const result = await products.find(query).sort({ _id: -1 }).toArray();
 
