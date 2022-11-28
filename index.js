@@ -558,9 +558,20 @@ async function run() {
       async (req, res) => {
         try {
           const { id } = req.params;
+
+          const checkVerifySeller = await verifySellerCollection.findOne({
+            user_id: id,
+          });
+          if (!checkVerifySeller) {
+            res.send({
+              success: false,
+              error: "No Request Found",
+            });
+          }
+
           const query = { _id: ObjectId(id) };
           const newDocs = { $set: { isVerified: true } };
-          const options = { upsert: true };
+          const options = { upsert: false };
           const result = await usersCollection.updateOne(
             query,
             newDocs,
@@ -568,9 +579,9 @@ async function run() {
           );
 
           const result2 = await verifySellerCollection.updateOne(
-            { userId: id },
+            { user_id: id },
             { $set: { status: "Approved" } },
-            options
+            { options }
           );
 
           if (result.modifiedCount === 1 && result2.modifiedCount === 1) {
@@ -612,6 +623,37 @@ async function run() {
             res.send({
               success: false,
               error: "Seller Verification Request Deletion Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
+    // Verify Seller Request Get API
+    app.get(
+      "/seller-verification",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const result = await verifySellerCollection
+            .find()
+            .sort({ _id: -1 })
+            .toArray();
+          if (result.length > 0) {
+            res.send({
+              success: true,
+              data: result,
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "No Seller Verification Request Found",
             });
           }
         } catch (error) {
@@ -769,6 +811,7 @@ async function run() {
               image,
               email,
               phone,
+              date: new Date(),
             };
             const result = await verifySellerCollection.insertOne(newRequest);
             if (result.acknowledged && result.insertedId) {
