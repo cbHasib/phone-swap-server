@@ -496,6 +496,58 @@ async function run() {
       }
     );
 
+    app.get("/get-products", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const result = await products.find({}).sort({ _id: -1 }).toArray();
+        if (result.length > 0) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Admin Product Delete API
+    app.delete(
+      "/products/admin/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { _id: ObjectId(id) };
+          const result = await products.deleteOne(query);
+          if (result.acknowledged && result.deletedCount > 0) {
+            res.send({
+              success: true,
+              message: "Product Deleted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Product Deletion Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Admin Route API End Here
 
     // Seller Route API Start Here
@@ -582,6 +634,67 @@ async function run() {
         }
       }
     );
+
+    // Seller Promote API
+    app.patch(
+      "/products/seller/promote/:id",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { _id: ObjectId(id) };
+          const newDocs = { $set: { promoted: true } };
+          const result = await products.updateOne(query, newDocs, {
+            upsert: false,
+          });
+          if (result.acknowledged && result.modifiedCount > 0) {
+            res.send({
+              success: true,
+              message: "Product Promoted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Product Promotion Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
+    // Get Promoted Products API
+    app.get("/products/promoted", async (req, res) => {
+      try {
+        const query = { promoted: true };
+        const result = await products
+          .find(query)
+          .sort({ _id: -1 })
+          .limit(10)
+          .toArray();
+        if (result.length > 0) {
+          res.send({
+            success: true,
+            data: result,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Promoted Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
 
     //
   } finally {
