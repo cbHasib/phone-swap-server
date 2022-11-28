@@ -548,6 +548,81 @@ async function run() {
       }
     );
 
+    const verifySellerCollection = db.collection("verifySeller");
+
+    // Seller verification by Admin
+    app.put(
+      "/seller-verification/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { _id: ObjectId(id) };
+          const newDocs = { $set: { isVerified: true } };
+          const options = { upsert: true };
+          const result = await usersCollection.updateOne(
+            query,
+            newDocs,
+            options
+          );
+
+          const result2 = await verifySellerCollection.updateOne(
+            { userId: id },
+            { $set: { status: "Approved" } },
+            options
+          );
+
+          if (result.modifiedCount === 1 && result2.modifiedCount === 1) {
+            res.send({
+              success: true,
+              message: "Seller Verified Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Seller Verification Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
+    // Seller verification request delete by Admin
+    app.delete(
+      "/seller-verification/:id",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { user_id: id };
+          const result = await verifySellerCollection.deleteOne(query);
+          if (result.acknowledged && result.deletedCount > 0) {
+            res.send({
+              success: true,
+              message: "Seller Verification Request Deleted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Seller Verification Request Deletion Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Admin Route API End Here
 
     // Seller Route API Start Here
@@ -668,19 +743,84 @@ async function run() {
       }
     );
 
+    // Seller Verification API
+    app.post(
+      "/users/verification-request/:id",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        try {
+          const { id } = req.params;
+          const query = { user_id: id };
+
+          const seller = await verifySellerCollection.findOne(query);
+          if (seller) {
+            res.send({
+              success: false,
+              error: "Verification Request Already Sent",
+            });
+          } else {
+            const data = req.body;
+            const { name, image, email, phone } = data;
+            const newRequest = {
+              user_id: id,
+              status: "Pending",
+              name,
+              image,
+              email,
+              phone,
+            };
+            const result = await verifySellerCollection.insertOne(newRequest);
+            if (result.acknowledged && result.insertedId) {
+              res.send({
+                success: true,
+                message: "Verification Request Sent Successfully",
+              });
+            } else {
+              res.send({
+                success: false,
+                error: "Verification Request Failed",
+              });
+            }
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
+    // Seller Route API End Here
+
+    // Product Route API Start Here
     // Get Promoted Products API
     app.get("/products/promoted", async (req, res) => {
       try {
-        const query = { promoted: true };
+        const query = { promoted: true, status: "Available" };
         const result = await products
           .find(query)
           .sort({ _id: -1 })
           .limit(10)
           .toArray();
-        if (result.length > 0) {
+
+        const users = await usersCollection.find({}).toArray();
+        const productsWithUsers = result.map((product) => {
+          const seller_id = product.seller_id;
+          const seller = users.find((user) => user._id == seller_id);
+          const seller_isVerified = seller.isVerified;
+
+          return {
+            ...product,
+            seller_isVerified,
+          };
+        });
+
+        if (productsWithUsers.length > 0) {
           res.send({
             success: true,
-            data: result,
+            data: productsWithUsers,
           });
         } else {
           res.send({
@@ -695,6 +835,46 @@ async function run() {
         });
       }
     });
+
+    // Get Product By Category API
+    app.get("/products/category/:cat_id", async (req, res) => {
+      try {
+        const cat_id = req.params.cat_id;
+        const query = { category_id: cat_id };
+        const result = await products.find(query).sort({ _id: -1 }).toArray();
+
+        const users = await usersCollection.find({}).toArray();
+        const productsWithUsers = result.map((product) => {
+          const seller_id = product.seller_id;
+          const seller = users.find((user) => user._id == seller_id);
+          const seller_isVerified = seller.isVerified;
+
+          return {
+            ...product,
+            seller_isVerified,
+          };
+        });
+
+        if (productsWithUsers.length > 0) {
+          res.send({
+            success: true,
+            data: productsWithUsers,
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "No Product Found",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // product details api end here
 
     //
   } finally {
