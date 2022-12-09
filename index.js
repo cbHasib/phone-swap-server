@@ -4,6 +4,9 @@ const { MongoClient, ServerApiVersion, Admin, ObjectId } = require("mongodb");
 require("dotenv").config();
 const jwt = require("jsonwebtoken");
 
+// This is your test secret API key.
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 const app = express();
 const port = process.env.PORT || 5000;
 
@@ -106,6 +109,12 @@ async function run() {
     // User Collection MongoDB CRUD Operations Start Here
     const usersCollection = db.collection("users");
 
+    // Wishlist API Start Here
+    const wishlistCollection = db.collection("wishlist");
+
+    // Payment API Start Here
+    const paymentCollection = db.collection("payments");
+
     // JWT Token Assign
     app.get("/token", async (req, res) => {
       const { email } = req.query;
@@ -139,6 +148,91 @@ async function run() {
       }
     });
     // JWT Token Assign End Here
+
+    // Payment API Start Here
+    app.post("/create-payment-intent", async (req, res) => {
+      const body = req.body;
+
+      const { product_price } = body;
+
+      const amount = product_price * 100;
+
+      const paymentIntent = await stripe.paymentIntents.create({
+        currency: "usd",
+        amount: amount,
+        payment_method_types: ["card"],
+      });
+      res.send({
+        clientSecret: paymentIntent.client_secret,
+      });
+    });
+
+    // Make payment API Start Here
+    app.post("/payments", verifyToken, async (req, res) => {
+      try {
+        const body = req.body;
+        const {
+          price,
+          transactionId,
+          email,
+          bookingId,
+          buyerId,
+          sellerId,
+          productId,
+          productName,
+          paymentMethod,
+        } = body;
+
+        const payment = {
+          price,
+          transactionId,
+          email,
+          bookingId,
+          buyerId,
+          sellerId,
+          productId,
+          productName,
+          date: new Date(),
+          paymentMethod,
+        };
+
+        const insertPayment = await paymentCollection.insertOne(payment);
+
+        const updateProduct = await products.updateOne(
+          { _id: ObjectId(productId) },
+          { $set: { status: "Paid" } }
+        );
+
+        const updateBooking = await bookingCollection.updateOne(
+          { _id: ObjectId(bookingId) },
+          { $set: { status: "Paid" } }
+        );
+
+        if (
+          insertPayment.acknowledged &&
+          updateProduct.acknowledged &&
+          updateBooking.acknowledged &&
+          insertPayment.insertedId &&
+          updateProduct.modifiedCount &&
+          updateBooking.modifiedCount
+        ) {
+          res.send({
+            success: true,
+            message: "Payment Successful",
+          });
+        } else {
+          res.send({
+            success: false,
+            message: "Payment Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
 
     // User Management Start Here
     // Create User
@@ -216,6 +310,9 @@ async function run() {
         ).length;
         const totalUserCount = await usersCollection.estimatedDocumentCount();
 
+        const totalOrderCount =
+          await paymentCollection.estimatedDocumentCount();
+
         res.send({
           success: true,
           data: {
@@ -224,6 +321,7 @@ async function run() {
             buyerCount,
             totalUserCount,
             adminCount,
+            totalOrderCount,
           },
         });
       } catch (error) {
@@ -835,13 +933,49 @@ async function run() {
       }
     );
 
+    // Seller own buyer list API
+    app.get(
+      "/buyer-list/:sellerId",
+      verifyToken,
+      verifySeller,
+      async (req, res) => {
+        try {
+          const sellerId = req.params.sellerId;
+          const query = { sellerId: sellerId };
+          const result = await paymentCollection.find(query).toArray();
+
+          const userIds = result.map((payment) => ObjectId(payment.buyerId));
+          const buyers = await usersCollection
+            .find({ _id: { $in: userIds } })
+            .toArray();
+
+          if (buyers.length > 0) {
+            res.send({
+              success: true,
+              data: buyers,
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "No Buyer Found",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Seller Route API End Here
 
     // Product Route API Start Here
     // Get Promoted Products API
     app.get("/products/promoted", async (req, res) => {
       try {
-        const query = { promoted: true, status: "Available" };
+        const query = { promoted: true, status: { $ne: "Paid" } };
         const result = await products
           .find(query)
           .sort({ _id: -1 })
@@ -885,7 +1019,7 @@ async function run() {
         const cat_id = req.params.cat_id;
 
         if (!cat_id || cat_id == "all") {
-          const query = { status: "Available" };
+          const query = { status: { $ne: "Paid" } };
           const result = await products.find(query).sort({ _id: -1 }).toArray();
 
           const users = await usersCollection.find({}).toArray();
@@ -915,7 +1049,7 @@ async function run() {
           return;
         }
 
-        const query = { category_id: cat_id };
+        const query = { category_id: cat_id, status: { $ne: "Paid" } };
         const result = await products.find(query).sort({ _id: -1 }).toArray();
 
         const users = await usersCollection.find({}).toArray();
@@ -958,6 +1092,33 @@ async function run() {
       try {
         const { id } = req.params;
         const body = req.body;
+
+        const { buyer_id, product_id, buyer_email } = body;
+
+        const isExist = await bookingCollection.findOne({
+          buyer_id,
+          product_id,
+        });
+        if (isExist) {
+          res.send({
+            success: false,
+            error: "Product Already Booked",
+          });
+          return;
+        }
+
+        const isWishlisted = await wishlistCollection.findOne({
+          buyer_email,
+          product_id,
+        });
+
+        if (isWishlisted) {
+          const deleteWishlist = await wishlistCollection.deleteOne({
+            buyer_email,
+            product_id,
+          });
+        }
+
         const update = { $set: { status: "Booked" } };
         const query = { _id: ObjectId(id) };
         const result = await products.updateOne(query, update, {
@@ -968,9 +1129,54 @@ async function run() {
 
         if (
           result.acknowledged &&
-          result.modifiedCount > 0 &&
           addBooking.acknowledged &&
           addBooking.insertedId
+        ) {
+          res.send({
+            success: true,
+            message: "Product Booked Successfully",
+          });
+        } else {
+          res.send({
+            success: false,
+            error: "Product Booking Failed",
+          });
+        }
+      } catch (error) {
+        res.send({
+          success: false,
+          error: error.message,
+        });
+      }
+    });
+
+    // Book Product from Wishlist API
+    // Book Product API
+    app.post("/products/wishlist-book/:id", verifyToken, async (req, res) => {
+      try {
+        const { id } = req.params;
+        const body = req.body;
+        const update = { $set: { status: "Booked" } };
+        const query = { _id: ObjectId(id) };
+        const result = await products.updateOne(query, update, {
+          upsert: false,
+        });
+
+        const deleteWishlist = await wishlistCollection.deleteOne({
+          _id: ObjectId(body.wishlistId),
+        });
+
+        const addBooking = await bookingCollection.insertOne(body);
+
+        console.log(addBooking, deleteWishlist, result);
+
+        if (
+          result.acknowledged &&
+          result.modifiedCount > 0 &&
+          addBooking.acknowledged &&
+          addBooking.insertedId &&
+          deleteWishlist.acknowledged &&
+          deleteWishlist.deletedCount > 0
         ) {
           res.send({
             success: true,
@@ -1026,6 +1232,53 @@ async function run() {
       }
     });
 
+    // Delete Booked Product API
+    app.delete(
+      "/products/booked/:email/:id/:product_id",
+      verifyToken,
+      async (req, res) => {
+        try {
+          const { email, id, product_id } = req.params;
+          if (email !== req.user.email) {
+            res.status(401).send({
+              success: false,
+              error: "Unauthorized Access",
+            });
+            return;
+          }
+
+          const query = { _id: ObjectId(id) };
+          const result = await bookingCollection.deleteOne(query);
+
+          const update = { $set: { status: "Available" } };
+          const query2 = { _id: ObjectId(product_id) };
+          const result2 = await products.updateOne(query2, update);
+
+          if (
+            result.acknowledged &&
+            result.deletedCount > 0 &&
+            result2.acknowledged &&
+            result2.modifiedCount > 0
+          ) {
+            res.send({
+              success: true,
+              message: "Booked Product Deleted Successfully",
+            });
+          } else {
+            res.send({
+              success: false,
+              error: "Booked Product Delete Failed",
+            });
+          }
+        } catch (error) {
+          res.send({
+            success: false,
+            error: error.message,
+          });
+        }
+      }
+    );
+
     // Get Single Booked Products API
     app.get("/products/booked/:email/:id", verifyToken, async (req, res) => {
       try {
@@ -1059,8 +1312,6 @@ async function run() {
       }
     });
 
-    // Wishlist API Start Here
-    const wishlistCollection = db.collection("wishlist");
     // Add to Wishlist API
     app.post("/wishlist/add/:id", verifyToken, async (req, res) => {
       try {
@@ -1073,6 +1324,18 @@ async function run() {
           res.send({
             success: false,
             error: "Product Already Added to Wishlist",
+          });
+          return;
+        }
+
+        const isBookingExist = await bookingCollection.findOne({
+          product_id: id,
+          buyer_email: req.user.email,
+        });
+        if (isBookingExist) {
+          res.send({
+            success: false,
+            error: "Product Already Booked",
           });
           return;
         }
